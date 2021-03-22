@@ -1,7 +1,4 @@
 ---
-title: "Lab-2"
-author: "Prof.Feng Mai, Zihan Chen"
-output: html_document
 ---
 
 Beofre you start the exercise, please put this rmd file in the same folder as your data/ folder, then click on "Set Working Directory" - "To Source File Location".
