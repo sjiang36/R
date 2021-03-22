@@ -1,8 +1,3 @@
-# ========================================
-# Community detection algorithms in igraph
-# 2017-03-29, Feng Mai
-# Last Update: 2019-11-04 
-# ========================================
 
 library(igraph)
 
