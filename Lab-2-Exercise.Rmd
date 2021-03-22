@@ -1,0 +1,178 @@
+---
+title: "Lab-2"
+author: "Prof.Feng Mai, Zihan Chen"
+output: html_document
+---
+
+Beofre you start the exercise, please put this rmd file in the same folder as your data/ folder, then click on "Set Working Directory" - "To Source File Location".
+
+(Import packages and load data)
+```{r, results='hide', message=FALSE, warning=FALSE}
+#install.packages(c('tm', 'SnowballC', 'wordcloud'))
+library(tm)
+library(SnowballC)
+library(wordcloud)
+library(tidyverse)
+library(e1071)
+reviews <- read_tsv("C:/658/Week6-Lab2/data/amazon_alexa.tsv")
+reviews <- reviews %>% mutate(polarity = ifelse(rating == 5, 1, 0)) %>% 
+  dplyr::select(-rating, -date, -feedback, -variation)
+review_corpus <- Corpus(VectorSource(reviews$verified_reviews))
+```
+
+We will analyze a product review dataset of Amazon Alexa. We already created a new response variable `polarity`. If rating == 5 then `polarity` is 1. Otherwise `polarity is 0. 
+
+# Question 1
+1. transform the text to lower case
+2. remove the numbers, punctuation marks, extra whitespaces and stopwords
+3. DO NOT stem the words
+
+Assign the new data to review_corpus, and show the content of the 25th element in review_corpus.
+
+
+```{r, warning=FALSE}
+ ## Enter your code here
+#1
+review_corpus <- tm_map(review_corpus, tolower)
+#2
+review_corpus <- tm_map(review_corpus, removeNumbers)
+review_corpus <- tm_map(review_corpus, removePunctuation)
+review_corpus <- tm_map(review_corpus, removeWords, stopwords("english"))
+review_corpus <- tm_map(review_corpus, stripWhitespace)
+
+review_corpus[[25]]$content
+```
+
+
+# Question 2
+1. Build a Document Term Matrix, where the upper threshold is 6000 (remove words that appear more than 6000 times), and lower bound is 5 (remove words that appear fewer than 5 times).
+2. Now we get the matrix, show the result of 12 to 22 rows, and 25 to 30 columns.
+
+```{r, message=FALSE, warning=FALSE}
+## Enter your code here
+review_dtm <- DocumentTermMatrix(review_corpus, control = list(bounds = list(global = c(5, 6000))))
+review_dtm
+inspect(review_dtm[12:22, 25:30]) 
+```
+
+
+
+# Question 3
+
+Build a word cloud with top 75 words. Do not use the default color. Instead, pick your favorite sequential palette. (Hint: See ?wordcloud and https://data.library.virginia.edu/setting-up-color-palettes-in-r/.)
+
+```{r, message=FALSE, warning=FALSE}
+## Enter your code here
+freq <- data.frame(sort(colSums(as.matrix(review_dtm)), decreasing=TRUE))
+wordcloud(rownames(freq), freq[,1], max.words=75, colors=brewer.pal(12, "Paired"))
+
+```
+
+
+# Question 4
+
+Remove the less frequent terms such that the sparsity is less than 0.98. And show the result of 10 to 20 rows, 20 to 25 columns.
+
+
+```{r, message=FALSE, warning=FALSE}
+## Enter your code here
+review_dtm <- removeSparseTerms(review_dtm, 0.98)
+review_dtm
+inspect(review_dtm[10:20, 20:25])
+```
+
+
+## Question 5
+
+We have used classification tree, logistic regression, support vector machine (SVM) to build our classifiction models in the movie review case. Now compare these model's test-set performance in the Alexa review dataset. Use the model's default parameters (no hyper-parameter tuning). Follow the following guidelines. Good Luck.
+
+1. Use TFIDF to weight the tokens, meanwhile drop the sparse term so the sparsity is less than 0.98.
+2. Import negative and positive word lists, and use tm_term_score to count the number of positive and negative words in a review. 
+3. Rememver to remove the actual texual content, add score to the original dataset, and use polarity as the target. 
+4. Train-Test split, where train set contains 70% of the data, test contains 30%. 
+5. Use classification tree, logistic regression, and SVM to build models.
+6. Output the confusion matrix for the three methods.
+7. Repeat the steps but now use the term-frequency DTM as features (no TFIDF weighting). Do you get better performance? 
+
+```{r, message=FALSE, warning=FALSE}
+
+#1
+review_dtm_tfidf <- DocumentTermMatrix(review_corpus, control = list(weighting = weightTfIdf))
+review_dtm_tfidf <- removeSparseTerms(review_dtm_tfidf, 0.98)
+review_dtm_tfidf
+#2
+neg_words <- read_table("C:/658/Week6-Lab2/data/negative-words.txt", col_names = F) %>% unlist()
+pos_words <- read_table("C:/658/Week6-Lab2/data/positive-words.txt", col_names = F) %>% unlist()
+reviews$n_neg <- tm_term_score(DocumentTermMatrix(review_corpus), neg_words)
+reviews$n_pos <- tm_term_score(DocumentTermMatrix(review_corpus), pos_words)
+#3
+reviews$content <- NULL
+reviews$polarity <- as.factor(reviews$polarity)
+reviews$reviewid <- NULL
+#4
+id_train <- sample(nrow(reviews),nrow(reviews)*0.70)
+reviews.train <- reviews[id_train,]
+reviews.test <- reviews[-id_train,]
+#5
+library(rpart)
+library(rpart.plot)
+library(e1071) # for Support Vector Machine
+reviews.tree <- rpart(polarity~.,  method = "class", data = reviews.train);
+reviews.glm <- glm(polarity~ ., family = "binomial", data =reviews.train, maxit = 100);  
+reviews.svm <- svm(polarity~., data = reviews.train);
+prp(reviews.tree)
+#6
+pred.tree <- predict(reviews.tree, reviews.test,  type="class")
+table(reviews.test$polarity,pred.tree,dnn=c("Observed","Predicted"))
+mean(ifelse(reviews.test$polarity != pred.tree, 1, 0))
+
+pred.glm <- as.numeric(predict(reviews.glm, reviews.test, type="response") > 0.5)
+table(reviews.test$polarity,pred.glm,dnn=c("Observed","Predicted"))
+mean(ifelse(reviews.test$polarity != pred.glm, 1, 0))
+
+pred.svm <- predict(reviews.svm, reviews.test)
+table(reviews.test$polarity,pred.svm,dnn=c("Observed","Predicted"))
+mean(ifelse(reviews.test$polarity != pred.svm, 1, 0))
+#7
+review_dtm_new <- DocumentTermMatrix(review_corpus, control = list(weighting = weightTfIdf))
+review_dtm_new <- removeSparseTerms(review_dtm_tfidf, 0.98)
+review_dtm_new
+
+neg_words <- read_table("C:/658/Week6-Lab2/data/negative-words.txt", col_names = F) %>% unlist()
+pos_words <- read_table("C:/658/Week6-Lab2/data/positive-words.txt", col_names = F) %>% unlist()
+reviews$n_neg <- tm_term_score(DocumentTermMatrix(review_corpus), neg_words)
+reviews$n_pos <- tm_term_score(DocumentTermMatrix(review_corpus), pos_words)
+
+reviews$content <- NULL
+reviews$polarity <- as.factor(reviews$polarity)
+reviews$reviewid <- NULL
+
+id_train <- sample(nrow(reviews),nrow(reviews)*0.70)
+reviews.train <- reviews[id_train,]
+reviews.test <- reviews[-id_train,]
+
+library(rpart)
+library(rpart.plot)
+library(e1071) # for Support Vector Machine
+reviews.tree <- rpart(polarity~.,  method = "class", data = reviews.train);
+reviews.glm <- glm(polarity~ ., family = "binomial", data =reviews.train, maxit = 100);  
+reviews.svm <- svm(polarity~., data = reviews.train);
+prp(reviews.tree)
+
+pred.tree <- predict(reviews.tree, reviews.test,  type="class")
+table(reviews.test$polarity,pred.tree,dnn=c("Observed","Predicted"))
+mean(ifelse(reviews.test$polarity != pred.tree, 1, 0))
+
+pred.glm <- as.numeric(predict(reviews.glm, reviews.test, type="response") > 0.5)
+table(reviews.test$polarity,pred.glm,dnn=c("Observed","Predicted"))
+mean(ifelse(reviews.test$polarity != pred.glm, 1, 0))
+
+pred.svm <- predict(reviews.svm, reviews.test)
+table(reviews.test$polarity,pred.svm,dnn=c("Observed","Predicted"))
+mean(ifelse(reviews.test$polarity != pred.svm, 1, 0))
+
+
+
+
+
+```
