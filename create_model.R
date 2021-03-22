@@ -5,7 +5,6 @@ library(grid)
 library(randomForestExplainer)
 library(ggpubr)
 
-# upcoming rating event as variable is cheating - switch around upcoming rating event as classifier and take prob of default as independent variable?
 
 source("plotTree.R")
 
